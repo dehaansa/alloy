@@ -134,6 +134,51 @@ func TestFile_ExistOnLoad(t *testing.T) {
 	require.ErrorAs(t, err, &expectErr)
 }
 
+// TestFile_TrimWhitespace tests the TrimWhitespace argument
+func TestFile_TrimWhitespace(t *testing.T) {
+	testFile := filepath.Join(t.TempDir(), "testfile")
+	require.NoError(t, os.WriteFile(testFile, []byte(" Hello, world!\n \n"), 0664))
+
+	tc1, err := componenttest.NewControllerFromID(nil, "local.file")
+	require.NoError(t, err)
+	go func() {
+		err := tc1.Run(componenttest.TestContext(t), file.Arguments{
+			Filename:      testFile,
+			Type:          filedetector.DetectorPoll,
+			PollFrequency: 1 * time.Hour,
+		})
+		require.NoError(t, err)
+	}()
+
+	tc2, err := componenttest.NewControllerFromID(nil, "local.file")
+	require.NoError(t, err)
+	go func() {
+		err := tc2.Run(componenttest.TestContext(t), file.Arguments{
+			Filename:       testFile,
+			Type:           filedetector.DetectorPoll,
+			TrimWhitespace: true,
+			PollFrequency:  1 * time.Hour,
+		})
+		require.NoError(t, err)
+	}()
+
+	require.NoError(t, tc1.WaitExports(time.Second))
+	require.NoError(t, tc2.WaitExports(time.Second))
+	require.Equal(t, file.Exports{
+		Content: alloytypes.OptionalSecret{
+			IsSecret: false,
+			Value:    " Hello, world!\n \n",
+		},
+	}, tc1.Exports())
+
+	require.Equal(t, file.Exports{
+		Content: alloytypes.OptionalSecret{
+			IsSecret: false,
+			Value:    "Hello, world!",
+		},
+	}, tc2.Exports())
+}
+
 // canceledContext creates a context which is already canceled.
 func canceledContext() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())

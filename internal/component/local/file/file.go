@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,6 +44,9 @@ type Arguments struct {
 	Filename string `alloy:"filename,attr"`
 	// Type indicates how to detect changes to the file.
 	Type filedetector.Detector `alloy:"detector,attr,optional"`
+	// TrimWhitespace indicates whether to trim leading and trailing whitespace
+	// from the file contents.
+	TrimWhitespace bool `alloy:"trim_whitespace,attr,optional"`
 	// PollFrequency determines the frequency to check for changes when Type is
 	// Poll.
 	PollFrequency time.Duration `alloy:"poll_frequency,attr,optional"`
@@ -169,7 +173,11 @@ func (c *Component) readFile() error {
 		level.Error(c.opts.Logger).Log("msg", "failed to read file", "path", c.opts.DataPath, "err", err)
 		return err
 	}
-	c.latestContent = string(bb)
+	content := string(bb)
+	if c.args.TrimWhitespace {
+		content = strings.TrimSpace(content)
+	}
+	c.latestContent = content
 	c.lastAccessed.SetToCurrentTime()
 
 	c.opts.OnStateChange(Exports{
